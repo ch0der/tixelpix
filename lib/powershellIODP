@@ -1,0 +1,59 @@
+# Run as Administrator
+if (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator"))
+{
+    Write-Warning "You do not have Administrator rights to run this script!`nPlease re-run this script as an Administrator!"
+    Break
+}
+
+# Import the required ServerManager module
+Import-Module ServerManager
+
+# Check for updates
+$UpdateSession = New-Object -ComObject Microsoft.Update.Session
+$UpdateSearcher = $UpdateSession.CreateUpdateSearcher()
+
+Write-Host "Searching for updates..." -NoNewline
+
+$SearchResult = $UpdateSearcher.Search("IsInstalled=0 and Type='Software' and IsHidden=0")
+
+Write-Host "Done."
+
+# List the updates
+$SearchResult.Updates | ForEach-Object { Write-Host $_.Title }
+
+# Download the updates
+$UpdatesToDownload = New-Object -ComObject Microsoft.Update.UpdateColl
+
+$SearchResult.Updates | ForEach-Object {
+    if ($_.EulaAccepted -eq 0) {
+        $_.AcceptEula()
+    }
+    $UpdatesToDownload.Add($_) | Out-Null
+}
+
+$Downloader = $UpdateSession.CreateUpdateDownloader()
+$Downloader.Updates = $UpdatesToDownload
+
+Write-Host "Downloading updates..." -NoNewline
+
+$DownloadResult = $Downloader.Download()
+
+Write-Host "Done."
+
+# Install the updates
+$UpdatesToInstall = New-Object -ComObject Microsoft.Update.UpdateColl
+
+$SearchResult.Updates | ForEach-Object {
+    if ($_.IsDownloaded) {
+        $UpdatesToInstall.Add($_) | Out-Null
+    }
+}
+
+$Installer = $UpdateSession.CreateUpdateInstaller()
+$Installer.Updates = $UpdatesToInstall
+
+Write-Host "Installing updates..." -NoNewline
+
+$InstallationResult = $Installer.Install()
+
+Write-Host "Done."
